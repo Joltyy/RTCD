@@ -17,6 +17,7 @@ IDX_TO_CHORD = {v: k for k, v in model.CHORD_CLASSES.items()}
 window_samples = model.WINDOW_SAMPLES
 
 mode = input("Enter 'record' to capture audio or 'file' to read from a wav file: ").strip().lower()
+file_path = input("Enter the path to the wav file (if 'file' is selected): ").strip() if mode == "file" else None
 
 recording_output_path = "recording_output.wav"
 
@@ -83,7 +84,7 @@ if mode == "record":
 
 elif mode == "file":
     # load from wav file
-    audio_float, _ = lr.load("cruelsummersample.wav", sr=RATE)
+    audio_float, _ = lr.load(file_path, sr=RATE)
 
     # compute cqt of the full audio for visualization
     spectogram_full = spec.Spectogram(audio_float, sr=RATE)
