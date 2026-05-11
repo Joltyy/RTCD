@@ -1,6 +1,6 @@
-# ChordThingy — Real-time Chord Detection
+## RTDC - Real Time Chord Detection  
 
-ChordThingy is a compact Python project that performs chord recognition on audio using a trained convolutional neural network (CNN) over Constant-Q Transform (CQT) spectrograms. It supports two modes:
+RTCD is a compact Python project that performs chord recognition on audio using a trained convolutional neural network (CNN) over Constant-Q Transform (CQT) spectrograms. It supports two modes:
 
 - Real-time (microphone): continuously listens to the default system microphone and prints detected chords to the terminal with low latency.
 - File-mode: processes a full audio file and prints a chord timeline after the file is analyzed.
