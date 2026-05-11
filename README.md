@@ -1,4 +1,4 @@
-## RTDC - Real Time Chord Detection  
+## RTCD - Real Time Chord Detection  
 
 RTCD is a compact Python project that performs chord recognition on audio using a trained convolutional neural network (CNN) over Constant-Q Transform (CQT) spectrograms. It supports two modes:
 
