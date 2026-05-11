@@ -17,7 +17,7 @@ IDX_TO_CHORD = {v: k for k, v in model.CHORD_CLASSES.items()}
 window_samples = model.WINDOW_SAMPLES
 
 mode = input("Enter 'record' to capture audio or 'file' to read from a wav file: ").strip().lower()
-file_path = input("Enter the path to the wav file (if 'file' is selected): ").strip() if mode == "file" else None
+file_path = input("Enter the path to the wav file: ").strip() if mode == "file" else None
 
 recording_output_path = "recording_output.wav"
 

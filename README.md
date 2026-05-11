@@ -38,15 +38,9 @@ python src/recordingTest.py
 You will be prompted to enter a mode:
 
 - `record` — start capturing from the microphone and output chord predictions in real time. Stop the program with Ctrl+C.
-- `file` — process a hard-coded audio file (the script currently uses `cruelsummersample.wav`) and print the chord timeline at the end.
+- `file` — process an audio file and print the chord timeline at the end. The program will first show the spectogram of the entire audio file for reference.
 
 Output is printed to the terminal as chords change. Real-time mode prints only when the predicted chord differs from the previous prediction.
-
-## Where the model is loaded
-
-The runtime expects a model checkpoint at `checkpoints/latest.pth`. The checkpoint should contain a PyTorch state dict under the key `model_state_dict` (the training scripts in this repo produce that format).
-
-If you want to use a different checkpoint, edit the path in `src/recordingTest.py` where the checkpoint is loaded.
 
 ## Configuration / Important constants
 - Sample rate: 48000 Hz (see `src/model.py` and `src/record.py`).
