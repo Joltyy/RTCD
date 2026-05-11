@@ -56,6 +56,3 @@ Output is printed to the terminal as chords change. Real-time mode prints only w
 1. Small segments of audio (default 0.25s) are converted to CQT spectrograms using `librosa`.
 2. The spectrogram magnitude is converted to dB and normalized before being fed into the CNN.
 3. The model predicts one of the chord classes; the runtime prints changes in prediction as they occur.
-
-## Contributing
-Contributions are welcome — open issues for bugs or feature requests. If you change model architecture or training, please add or update a script in `src/` and provide instructions.
