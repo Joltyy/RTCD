@@ -1,0 +1,9 @@
+# Backend (src/server.py) dependencies
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+numpy==1.26.4
+librosa==0.10.2.post1
+soundfile==0.12.1
+tqdm==4.67.1
+matplotlib==3.9.2
+torch==2.5.1

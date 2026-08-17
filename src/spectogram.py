@@ -1,9 +1,15 @@
+import librosa_cache  # noqa: F401  -- must be imported before `librosa` itself (see librosa_cache.py)
 
 # Convert audio data in raw byte format into spectograms
 
 import numpy as np
 import matplotlib.pyplot as plt
 import librosa as lr
+
+# Fixed dB floor used by normalized_cqt() below. "Fixed" is the whole point:
+# every window gets clipped/scaled against the *same* floor, instead of each
+# window rescaling itself against its own loudest bin.
+DB_FLOOR = -80.0
 
 class Spectogram:
     def __init__(self, audio_data, sr=48000):
@@ -12,14 +18,23 @@ class Spectogram:
         self.cqt_spectrum = None
         self.cqt_db = None
         self.chroma = None
-    
+
     def compute_cqt(self):
-        # apply cqt to the audio data to get the spectogram
-        # lr.cqt returns a complex data so we take the absolute
-        # value to get the magnitude of the frequency
+        # lr.cqt returns a complex data so we take the absolute value to get the magnitude of the frequency
         self.cqt_spectrum = np.abs(lr.cqt(y=self.audio_data, sr=self.sr))
-        self.cqt_db = lr.amplitude_to_db(self.cqt_spectrum, ref=np.max)
-    
+        # ref=1.0 pins "0 dB" to a fixed amplitude (full-scale for our
+        # top_db=None disables librosa's default extra clipping
+        self.cqt_db = lr.amplitude_to_db(self.cqt_spectrum, ref=1.0, top_db=None)
+
+    def normalized_cqt(self, db_floor=DB_FLOOR):
+        """
+        Scale cqt_db into roughly [0, 1] for feeding into the network.
+        """
+        if self.cqt_db is None:
+            self.compute_cqt()
+        clipped = np.clip(self.cqt_db, db_floor, 0.0)
+        return (clipped - db_floor) / (0.0 - db_floor)
+
     def compute_chroma(self):
         self.chroma = lr.amplitude_to_db(lr.feature.chroma_cqt(y=self.audio_data, sr=self.sr), ref=np.max)
     

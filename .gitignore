@@ -1,3 +1,59 @@
-data
+# ---------------------------------------------------------------- Data ----
+# Dataset audio/annotations plus data/cache/*.pt segment tensors.
+/data/
 *.wav
-.vscode
+*.flac
+recording_output.wav
+
+# ------------------------------------------------------ Model artifacts ---
+# checkpoints/latest.pth IS tracked on purpose: a fresh clone can run
+# inference, and the Dockerfile COPYs checkpoints/ into the Cloud Run image.
+# Per-epoch snapshots and the old top-level dump are local-only.
+checkpoints/epoch_*.pth
+chord_cnn_model.pth
+
+# -------------------------------------------------------------- Python ----
+__pycache__/
+*.py[cod]
+__pycache_backup/
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+
+# --------------------------------------------------- Caches & scratch -----
+.librosa_cache/
+_to_delete/
+tempCodeRunnerFile.py
+
+# ------------------------------------------------------------ Frontend ----
+# frontend/ carries its own .gitignore too; these are the entries that
+# matter when running git from the repo root.
+frontend/node_modules/
+frontend/dist/
+
+# ------------------------------------------------- Secrets & local env ----
+# .env.production holds the deployed Cloud Run WS URL, .env.development is
+# local-only. Both are per-machine and generated during deploy setup.
+# frontend/.env.production.example is the tracked template.
+.env
+.env.local
+frontend/.env
+frontend/.env.local
+frontend/.env.development
+frontend/.env.production
+!frontend/.env.production.example
+
+# --------------------------------------------- Firebase / Cloud Run -------
+.firebase/
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+
+# ------------------------------------------------------ Editors & OS ------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log

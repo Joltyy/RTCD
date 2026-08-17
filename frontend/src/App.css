@@ -1,0 +1,144 @@
+.app {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 24px 64px;
+}
+
+.subtitle {
+  color: var(--text);
+  margin-bottom: 40px;
+}
+
+.source-select {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.source-option {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.source-option--active {
+  background: var(--accent);
+  border-color: var(--accent-border);
+  color: #fff;
+}
+
+.source-hint {
+  max-width: 360px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--text);
+  margin-bottom: 20px;
+}
+
+.source-hint a {
+  color: var(--text-h);
+}
+
+.chord-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--accent-bg);
+  margin-bottom: 32px;
+}
+
+.chord-name {
+  font-size: 64px;
+  font-weight: 600;
+  color: var(--text-h);
+  letter-spacing: -1px;
+}
+
+.chord-name--empty {
+  color: var(--text);
+  opacity: 0.4;
+}
+
+.toggle-button {
+  font: inherit;
+  font-weight: 600;
+  padding: 14px 36px;
+  border-radius: 999px;
+  border: 1px solid var(--accent-border);
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.toggle-button:hover {
+  opacity: 0.9;
+}
+
+.toggle-button--stop {
+  background: transparent;
+  color: var(--text-h);
+  border-color: var(--border);
+}
+
+.status {
+  margin-top: 16px;
+  color: var(--text);
+  min-height: 1.5em;
+}
+
+.status--error {
+  color: #e0483e;
+}
+
+.history {
+  margin-top: 48px;
+  width: 100%;
+  max-width: 360px;
+}
+
+.history ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.history li {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 14px;
+}
+
+.history li:last-child {
+  border-bottom: none;
+}
+
+.history-time {
+  color: var(--text);
+}
+
+.history-chord {
+  font-weight: 600;
+  color: var(--text-h);
+}

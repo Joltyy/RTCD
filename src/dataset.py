@@ -1,15 +1,31 @@
+import librosa_cache  # noqa: F401  -- must be imported before `librosa` itself (see librosa_cache.py)
+
 import librosa
 import numpy as np
 import os
 import glob
 
 class ChordDataset:
-    def __init__(self, audio_dir, annotation_dir, sr, hop_length):
-        self.audio_dir = sorted(glob.glob(os.path.join(audio_dir, "*.flac")))
+    def __init__(self, audio_dir, annotation_dir, sr, file_list=None):
+        if file_list is not None:
+            self.audio_dir = file_list
+        else:
+            self.audio_dir = sorted(glob.glob(os.path.join(audio_dir, "*.flac")))
         self.annotation_dir = annotation_dir
         self.sr = sr
-        self.hop_length = hop_length
-    
+
+    def file_id_for(self, audio_path):
+        """
+        Extract the numeric song id from an audio file path,
+        e.g. '0001' from '.../0001_mix.flac'.
+        """
+        return os.path.basename(audio_path).split('_')[0]
+
+    def annotation_path_for(self, audio_path):
+        """Build the matching '<id>_beatinfo.arff' annotation path for a given audio file."""
+        file_id = self.file_id_for(audio_path)
+        return os.path.join(self.annotation_dir, f"{file_id}_beatinfo.arff")
+
     def parseBeatInfo(self, annotation_path, total_duration):
         events = []
 
@@ -39,9 +55,7 @@ class ChordDataset:
 
     def getItem(self, idx):
         audio_path = self.audio_dir[idx] # format: xxxx_mix.flac
-        file_id = os.path.basename(audio_path).split('_')[0] # gets the base number ex. '0001' from '0001_mix.flac'
-        
-        annotation_filename = os.path.join(self.annotation_dir, f"{file_id}_beatinfo.arff")
+        annotation_filename = self.annotation_path_for(audio_path)
 
         y, _ = librosa.load(audio_path, sr=self.sr)
         duration = librosa.get_duration(y=y, sr=self.sr)

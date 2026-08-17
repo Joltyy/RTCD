@@ -1,17 +1,21 @@
+import librosa_cache  # noqa: F401  -- must be imported before `librosa` itself (see librosa_cache.py)
+
+import glob
+import random
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader
 import dataset
 import model
 import os
 
 RATE = 48000
-HOP_LENGTH = 256
 BATCH_SIZE = 32
 EPOCHS = 10
 LEARNING_RATE = 0.001
 TRAIN_SPLIT = 0.8
+SPLIT_SEED = 42  # fixed seed so the train/test song split is reproducible run-to-run
 
 device = model.DEVICE
 
@@ -22,19 +26,32 @@ annot_path = os.path.join("data", "0001-1000-annotations-v1.1.0")
 print(f"Audio Path: {audio_path}")
 print(f"Annotation Path: {annot_path}")
 
-raw_data = dataset.ChordDataset(
-    audio_dir=audio_path, 
-    annotation_dir=annot_path, 
-    sr=RATE, 
-    hop_length=HOP_LENGTH
+# --- Split by SONG, before any windows/segments exist ---
+all_files = sorted(glob.glob(os.path.join(audio_path, "*.flac")))
+rng = random.Random(SPLIT_SEED)
+shuffled_files = all_files[:]
+rng.shuffle(shuffled_files)
+split_idx = int(TRAIN_SPLIT * len(shuffled_files))
+train_files, test_files = shuffled_files[:split_idx], shuffled_files[split_idx:]
+print(f"Song-level split: {len(train_files)} train songs, {len(test_files)} test songs")
+
+train_raw = dataset.ChordDataset(
+    audio_dir=audio_path,
+    annotation_dir=annot_path,
+    sr=RATE,
+    file_list=train_files,
+)
+test_raw = dataset.ChordDataset(
+    audio_dir=audio_path,
+    annotation_dir=annot_path,
+    sr=RATE,
+    file_list=test_files,
 )
 
 # load and preprocess data
-print("Initializing Segmented Dataset (this might take a few moments)...")
-full_data = model.ChordSegmentDataset(raw_data)
-train_size = int(TRAIN_SPLIT * len(full_data))
-test_size = len(full_data) - train_size
-train_data, test_data = random_split(full_data, [train_size, test_size])
+print("Initializing Segmented Datasets (this might take a few moments)...")
+train_data = model.ChordSegmentDataset(train_raw)
+test_data = model.ChordSegmentDataset(test_raw)
 
 train_loader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
 test_loader = DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=False)
@@ -127,8 +144,4 @@ test_acc = 100 * test_correct / test_total
 avg_test_loss = test_loss / len(test_loader)
 print(f"Test Loss: {avg_test_loss:.4f}, Test Accuracy: {test_acc:.2f}%")
 
-
-# save model
-save_path = "chord_cnn_model.pth"
-torch.save(cnn.state_dict(), save_path)
-print(f"Training Complete. Model saved to {save_path}")
+print("Training complete. Final weights are in checkpoints/latest.pth")
