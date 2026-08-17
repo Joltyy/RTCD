@@ -1,54 +1,77 @@
 # RTCD — Real-Time Chord Detection
 
-RTCD recognises musical chords from audio using a 1D convolutional network over
-Constant-Q Transform (CQT) spectrograms. It ships as two front ends over one
-shared inference engine:
+Recognises musical chords from audio in real time, using a 1D convolutional network
+over Constant-Q Transform (CQT) spectrograms.
 
-- **Terminal app** (`src/main.py`) — microphone or `.wav` file, prints chords as they change.
-- **Web app** (`src/server.py` + `frontend/`) — a React UI streaming **microphone
-  *or* browser tab / system audio** to a FastAPI WebSocket backend. Tab audio means
-  you can point it at a YouTube video and read the chords live.
+There are two ways to run it, both sharing one inference engine:
 
-Both paths load the same `checkpoints/latest.pth` through `src/chord_engine.py`, so
-the terminal app and the web app can never drift apart.
+- **Terminal app** — microphone or a `.wav` file, prints chords as they change.
+- **Web app** — a React UI that streams **microphone _or_ browser tab / system audio**
+  to a FastAPI WebSocket backend. Tab audio means you can point it at a YouTube video
+  and read the chords live.
 
-**Current model:** 25 classes (24 major/minor triads + N.C.), **87.87% test accuracy,
-0.73 test loss** on a held-out song-level split.
+**Model:** 25 classes (24 major/minor triads + N.C.), 87.87% test accuracy on a
+held-out song-level split. Currently triads only — no 7ths, dim, aug or sus.
 
 ---
 
-## Quick start (terminal app)
+## Requirements
+
+- Python 3.10+ (3.11 is what the Docker image uses)
+- Node 18+ and npm, for the web frontend
+- A trained checkpoint at `checkpoints/latest.pth` — one is included in the repo
+
+## Install
 
 ```bash
-python -m pip install --upgrade pip
+git clone <this-repo>
+cd chordthingy
+
+python -m venv .venv
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
+
 pip install -r requirements.txt
-pip install pyaudio          # microphone capture only; see Troubleshooting
+```
+
+`requirements.txt` pins **CPU-only** torch, which is all you need for inference. If
+you want to train on a GPU, install the CUDA build from
+[pytorch.org](https://pytorch.org/get-started/locally/) instead.
+
+For terminal microphone mode you also need PyAudio, which isn't in
+`requirements.txt` because it needs system libraries:
+
+```bash
+pip install pyaudio
+```
+
+If that fails, see [Troubleshooting](#troubleshooting). File mode and the entire web
+app work fine without it.
+
+---
+
+## Running the terminal app
+
+```bash
 python src/main.py
 ```
 
-> `requirements.txt` is the *backend/inference* dependency set and pins CPU-only
-> torch. For GPU training, install the CUDA build from
-> https://pytorch.org/get-started/locally/ instead.
-
 You'll be prompted for a mode:
 
-- `record` — capture from the default microphone and print predictions in real time.
-  Prints only when the chord *changes*. Ctrl+C to stop; the session is saved to
-  `recording_output.wav`.
-- `file` — analyse a `.wav` file. Shows the full-file spectrogram first, then prints
-  the chord timeline.
+| Mode | What it does |
+|---|---|
+| `record` | Listens to the default microphone and prints predictions live. Prints only when the chord *changes*. Ctrl+C to stop; the session is saved to `recording_output.wav`. |
+| `file` | Analyses a `.wav` file. Shows the full-file spectrogram, then prints the chord timeline. |
 
-## Quick start (web app)
+## Running the web app
 
-Backend, from the repo root:
+Two terminals. Backend first, from the repo root:
 
 ```bash
-pip install -r requirements.txt
 cd src
 uvicorn server:app --reload --port 8000
 ```
 
-Frontend, in a second terminal:
+Then the frontend:
 
 ```bash
 cd frontend
@@ -56,47 +79,57 @@ npm install
 npm run dev
 ```
 
-Then pick **Microphone** or **Tab / System Audio** in the UI and press Start. For
-tab audio, Chrome only offers the "share tab audio" checkbox when you select a
-**tab** (not a window or full screen) in the share picker.
+Open the URL Vite prints (usually `http://localhost:5173`), pick **Microphone** or
+**Tab / System Audio**, and press Start.
 
-Deployment (Cloud Run backend + Firebase Hosting frontend) is documented
-step-by-step in [`FIREBASE_DEPLOY.md`](FIREBASE_DEPLOY.md).
+No environment file is needed for local dev — the frontend falls back to
+`ws://<hostname>:8000/stream` when `VITE_BACKEND_WS_URL` is unset.
+
+> **Tab audio tip:** Chrome only offers the "Share tab audio" checkbox when you select
+> a **tab** in the share picker. Picking a window or your entire screen gives you a
+> stream with no audio track, and the app will tell you so rather than silently
+> connecting to nothing.
+
+See [`frontend/README.md`](frontend/README.md) for frontend specifics, and
+[`FIREBASE_DEPLOY.md`](FIREBASE_DEPLOY.md) for deploying to Cloud Run + Firebase
+Hosting.
 
 ---
 
 ## How it works
 
-1. Audio is cut into 0.25 s windows with 50% overlap at inference time.
-2. Each window becomes an 84-bin CQT via `librosa`, converted to dB against a
-   **fixed** reference (`ref=1.0`), then clipped to a **fixed** floor
-   (`DB_FLOOR = -80.0`) and rescaled into `[0, 1]`. Both "fixed"s matter: rescaling
-   each window against its own loudest bin would throw away loudness information and
-   let training and inference drift apart.
+1. Audio is cut into 0.25 s windows with 50% overlap.
+2. Each window becomes an 84-bin CQT via `librosa`, converted to dB against a fixed
+   reference (`ref=1.0`), clipped to a fixed floor (`-80 dB`), and rescaled to
+   `[0, 1]`. Both references are *fixed* on purpose — normalising each window against
+   its own loudest bin would discard loudness information and let training and
+   inference drift apart.
 3. The CQT is averaged across the time axis and classified by `ChordCNN1D` into one
    of the 25 classes.
-4. Only chord *changes* are emitted — in the terminal, and over the WebSocket.
+4. Only chord *changes* are emitted, in the terminal and over the WebSocket alike.
 
-Sample rate is 48000 Hz throughout. The browser's `AudioContext` is constructed with
-`sampleRate: 48000` to match, so no manual resampling is needed anywhere.
+Everything runs at 48 kHz. The browser's `AudioContext` is constructed with
+`sampleRate: 48000` to match, so no manual resampling happens anywhere.
 
 ### Web audio path
 
 ```
 mic (getUserMedia) ─┐
                     ├─→ AudioContext(48kHz) → AudioWorkletNode → WebSocket
-tab (getDisplayMedia)┘   (public/audio-processor.js buffers to ~4096-sample chunks)
+tab (getDisplayMedia)┘   (buffers to ~4096-sample chunks)
                                     ↓
-                    src/server.py  WS /stream
+                         src/server.py   WS /stream
                                     ↓
-                    StreamState (sliding window, 50% hop) → ChordEngine.predict()
+                    StreamState (sliding window, 50% hop)
                                     ↓
-                    {time, chord} JSON, pushed only on change
+                         ChordEngine.predict()
+                                    ↓
+                    {time, chord} JSON, sent only on change
 ```
 
-`StreamState` exists because the browser sends arbitrarily-sized chunks; it keeps a
-running buffer and advances by `hop_samples` so the streaming path reproduces exactly
-the sliding-window behaviour `predict_timeline()` gives file mode.
+`StreamState` exists because browsers send arbitrarily-sized chunks. It keeps a
+running buffer and advances by one hop at a time, so the streaming path reproduces
+exactly the sliding-window behaviour that file mode gets from `predict_timeline()`.
 
 ---
 
@@ -107,29 +140,29 @@ src/
   main.py            terminal entry point (record / file modes)
   chord_engine.py    ChordEngine — loads the checkpoint, predict() / predict_timeline()
   server.py          FastAPI backend: GET / health check, WS /stream
-  model.py           ChordCNN1D, CHORD_CLASSES, ChordSegmentDataset (training segments)
-  dataset.py         ChordDataset — on-disk layout, filename conventions, annotation parsing
+  model.py           ChordCNN1D, CHORD_CLASSES, ChordSegmentDataset
+  dataset.py         ChordDataset — on-disk layout, filenames, annotation parsing
   spectogram.py      Spectogram — CQT + normalized_cqt(), shared by training and inference
   record.py          Recording — PyAudio mic capture on a background thread
   train.py           training entry point
-  librosa_cache.py   sets LIBROSA_CACHE_* env vars; must be imported before librosa
-  verify_cache.py    standalone repair tool for a cache interrupted mid-write
-frontend/            Vite + React app (see frontend/README.md)
-checkpoints/         latest.pth is tracked; epoch_N.pth snapshots are local-only
-data/                dataset + data/cache/*.pt segment tensors (gitignored)
+  librosa_cache.py   sets LIBROSA_CACHE_* env vars; imported before librosa everywhere
+  verify_cache.py    repair tool for a segment cache interrupted mid-write
+frontend/            Vite + React app
+checkpoints/         latest.pth (tracked); epoch_N.pth snapshots (local only)
+data/                dataset + cached segment tensors (gitignored)
 Dockerfile           Cloud Run image for src/server.py
-firebase.json        Firebase Hosting config (serves frontend/dist)
-FIREBASE_DEPLOY.md   full deploy walkthrough
+firebase.json        Firebase Hosting config
 ```
 
-### Important constants
+### Key constants
 
 | What | Where | Value |
 |---|---|---|
 | Sample rate | `src/model.py`, `src/record.py` | 48000 Hz |
 | Window length | `WINDOW_SECONDS` in `src/model.py` | 0.25 s |
 | Hop | inference paths | 50% of window |
-| Classes | `CHORD_CLASSES` in `src/model.py` | 25 (24 triads + N.C.) |
+| dB floor | `DB_FLOOR` in `src/spectogram.py` | -80.0 |
+| Classes | `CHORD_CLASSES` in `src/model.py` | 25 |
 
 Shortening `WINDOW_SECONDS` lowers latency at the cost of prediction stability.
 
@@ -137,81 +170,78 @@ Shortening `WINDOW_SECONDS` lowers latency at the cost of prediction stability.
 
 ## Training
 
+You only need this if you want to retrain — a working checkpoint ships with the repo.
+
+The expected dataset layout is `<id>_mix.flac` audio paired with `<id>_beatinfo.arff`
+annotations, in two sibling directories. The paths are currently **hardcoded** near
+the top of `src/train.py`:
+
+```python
+audio_path = os.path.join("data", "0001-1000-audio-mixes_2")
+annot_path = os.path.join("data", "0001-1000-annotations-v1.1.0")
+```
+
+Edit those to point at your own data, then run from the repo root:
+
 ```bash
 python src/train.py
 ```
 
-`train.py` splits **songs** (not windows) into train/test with a fixed seed before any
-dataset is built — splitting windows would leak the same song into both sides. Each
-song is then chopped into 0.25 s labelled segments and cached as a normalised CQT
-tensor under `data/cache/`, with a progress bar showing `new` / `cached` / `segments`
-counts.
+Songs (not windows) are split into train/test with a fixed seed *before* any dataset
+is built — splitting windows would leak the same song into both sides. Each song is
+then chopped into 0.25 s labelled segments and cached as a CQT tensor under
+`data/cache/`.
 
-Caching decodes each song's audio at most **once** and slices segments out of memory,
-and writes each tensor via `.tmp` + `os.replace()` so an interrupted run can't leave a
-half-written file behind.
-
-Checkpoints: `checkpoints/latest.pth` holds model + optimizer state + epoch/accuracy
-and is the single source of truth for both inference and resuming training.
-`checkpoints/epoch_N.pth` are historical snapshots.
-
-If a training run is interrupted mid-caching:
+The first run is slow because it builds that cache; later runs reuse it. Writes are
+atomic, so an interrupted run can't leave a half-written tensor behind. If a run *is*
+interrupted mid-caching:
 
 ```bash
 python src/verify_cache.py
 ```
 
-It scans `data/cache/*.pt`, and quarantines anything that fails to load (plus stray
-`*.pt.tmp` files) into `_to_delete/corrupt_cache/` so the next run regenerates only
-those segments rather than the whole cache.
+That quarantines any unreadable cache entries so the next run regenerates only those,
+rather than the whole cache.
 
-> **Note on `.librosa_cache/`:** `LIBROSA_CACHE_LEVEL` is deliberately pinned to `10`
-> in `src/librosa_cache.py`. Level 10 caches only librosa's audio-*independent* filter
-> bank construction. Higher levels cache functions that take the actual audio as an
-> argument — those entries are never reused and the cache grows without bound (it once
-> reached ~90 GB). Don't raise it.
+`checkpoints/latest.pth` holds model + optimizer state + epoch/accuracy and is what
+both inference and training-resume read.
 
----
-
-## Roadmap
-
-Done: standalone inference engine, song-level train/test split, fixed-reference
-normalisation, deployed web app, tab/system audio capture.
-
-Next, in rough priority order:
-
-1. **Accuracy** — pitch-shift augmentation and a factored root/quality head first
-   (cheapest, highest impact), then temporal modelling (CRNN) instead of averaging
-   across the time axis, HPSS preprocessing, and prediction smoothing. Everything now
-   has an 87.87% baseline to be measured against.
-2. **Features** — key detection, BPM/tempo, beat-synced smoothing; further out,
-   Roman-numeral analysis, chord diagrams, section detection, chart export.
-3. **Deferred web work** — file-upload mode (`POST /analyze-file`), Firebase Auth +
-   Firestore session history, tightening backend CORS (currently `allow_origins=["*"]`),
-   and a real YouTube Data API search if the share-a-tab round trip gets annoying.
-
-A note on complex chords: a sample of the `_beatinfo.arff` annotations contained only
-major/minor triads. Supporting 7ths, dim, aug, sus etc. likely needs a richer
-annotation source or a different dataset — not just a bigger `CHORD_CLASSES` dict.
+> **Don't raise `LIBROSA_CACHE_LEVEL`.** It's pinned to `10` in
+> `src/librosa_cache.py`, which caches only librosa's audio-*independent* filter bank
+> construction. Higher levels also cache functions that take the audio itself as an
+> argument — those entries are never reused, and the cache grows without bound.
 
 ---
 
 ## Troubleshooting
 
-**PyAudio won't install.** It needs PortAudio headers. On Windows, prefer a prebuilt
-wheel (`pip install pipwin && pipwin install pyaudio`); on macOS `brew install
-portaudio` first; on Debian/Ubuntu `sudo apt install portaudio19-dev`. PyAudio is only
-needed for terminal `record` mode — file mode and the whole web app work without it.
+**PyAudio won't install.** It needs PortAudio headers:
 
-**Tab audio capture gives "no audio track".** You selected a window or entire screen
+- Windows: `pip install pipwin && pipwin install pyaudio`
+- macOS: `brew install portaudio` first
+- Debian/Ubuntu: `sudo apt install portaudio19-dev` first
+
+Only terminal `record` mode needs it.
+
+**"No audio track" when sharing a tab.** You selected a window or your entire screen
 instead of a tab, or left "Share tab audio" unchecked. Only the tab option exposes
 audio in Chrome.
 
-**Cloud Run container fails to start.** `model.py` is shared by the training and
-serving paths and imports everything at module load — including `tqdm`, which the
-server never calls. Any top-level import in `model.py`, `dataset.py`, or
-`spectogram.py` must be in `requirements.txt`, not just the ones the serving path
-exercises. Read the real traceback with
-`gcloud run services logs read chordthingy-backend --region=us-central1`; Cloud Run's
-generic "failed to start and listen on port" message looks identical for a slow cold
-start and an outright crash.
+**`ModuleNotFoundError` in the deployed container.** `model.py` is shared by the
+training and serving paths and imports everything at module load, including packages
+the server never calls. Any top-level import in `model.py`, `dataset.py`, or
+`spectogram.py` has to be in `requirements.txt` — not just the ones serving actually
+exercises.
+
+---
+
+## Contributing
+
+Issues and PRs welcome. A few things worth knowing:
+
+- There's no automated test suite yet. If you touch the frontend's session lifecycle
+  (`useChordStream.js`), please test start/stop races by hand — see
+  `frontend/README.md` for the specific failure modes that have bitten before.
+- `src/spectogram.py`'s `normalized_cqt()` is shared by training and inference. Change
+  it and you invalidate `data/cache/` and every existing checkpoint.
+- Run `npm run lint` and `npm run build` in `frontend/` before submitting.
